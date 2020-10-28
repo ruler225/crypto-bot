@@ -6,6 +6,7 @@ const { exit } = require("process");
 var projectDir = "/home/pi/Desktop/cryptobot/"
 var saveFileName = projectDir + 'storedData.json';
 var ready = false;
+var fail = false;
 
 const client = new Discord.Client();
 client.login(config.BOT_TOKEN);
@@ -40,21 +41,27 @@ function handlePriceCheck(i, symbol) {
         json: true,
         headers: {}}, (err, res, data) => {
             if (err) {
-                client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
-                console.error(err);
+                if (fail)
+			client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+                fail = true;
+		console.error(err);
         } else if (res.statusCode != 200) {
             console.error("Error: Non-OK status received: " + res.statusCode);
-            client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
+	    if (fail) 
+            	client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
+	    fail = true;
         } else {
             if (!data.data[symbol]) {
-                message.channel.send("Couldn't find a coin with the symbol: " + symbol);
+		if (fail)
+                	client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
+		fail = true;
                 return;
             }
             const price = data.data[symbol].quote.USD.price;
             const difference = price - saves.lastPriceNotified[i];
             //console.log("i = " + i);
             const percentageDifference = (difference/saves.lastPriceNotified[i])*100;
-
+	    fail = false;
             //console.log("New price for " + symbol + ": " + price);
             //console.log("difference of " + difference);
             //console.log("Found " + percentageDifference + " difference for " + symbol);
@@ -68,6 +75,7 @@ function handlePriceCheck(i, symbol) {
                 }
                 saves.lastPriceNotified[i] = price;
                 saves.lastDateNotified[i] = new Date();
+		saveConfig();
             }
             
         }
