@@ -42,40 +42,50 @@ function handlePriceCheck(i, symbol) {
         headers: {}}, (err, res, data) => {
             if (err) {
                 if (fail)
-			client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+			        client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
                 fail = true;
-		console.error(err);
+		        console.error(err);
         } else if (res.statusCode != 200) {
             console.error("Error: Non-OK status received: " + res.statusCode);
-	    if (fail) 
+	        if (fail) 
             	client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
-	    fail = true;
+	        fail = true;
         } else {
             if (!data.data[symbol]) {
-		if (fail)
-                	client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
-		fail = true;
+		        if (fail)
+                    client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
+		        fail = true;
                 return;
             }
             const price = data.data[symbol].quote.USD.price;
             const difference = price - saves.lastPriceNotified[i];
-            //console.log("i = " + i);
-            const percentageDifference = (difference/saves.lastPriceNotified[i])*100;
-	    fail = false;
-            //console.log("New price for " + symbol + ": " + price);
-            //console.log("difference of " + difference);
-            //console.log("Found " + percentageDifference + " difference for " + symbol);
-            if (Math.abs(percentageDifference) >= saves.alertThresholds[i]) {
-                if (percentageDifference < 0 ) {
+            var percentageDifference = 0;
+            let alertPrice = false;
+            if (saves.alertThresholds[i].endsWith('%')) {
+                percentageDifference = Math.abs(difference/saves.lastPriceNotified[i])*100;
+                let percentageThresold = Number(saves.alertThresholds[i].slice(0, -1));
+                alertPrice = percentageDifference >= percentageThresold;
+            } else if (Math.abs(difference) >= Number(saves.alertThresholds[i])) {
+                alertPrice = true;
+                percentageDifference = Math.abs(difference/saves.lastPriceNotified[i])*100;
+            }
+
+
+            fail = false;
+
+
+
+            if (alertPrice) {
+                if (difference < 0 ) {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, a decrease of " +
-                        Math.abs(difference) + " USD (" + Math.abs(percentageDifference).toFixed(1) + "%) since " + saves.lastDateNotified[i].toLocaleString("en-US"));
+                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[i].toLocaleString("en-US"));
                 } else {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, an increase of " +
                         difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[i].toLocaleString("en-US"));
                 }
                 saves.lastPriceNotified[i] = price;
                 saves.lastDateNotified[i] = new Date();
-		saveConfig();
+		        saveConfig();
             }
             
         }
@@ -154,29 +164,40 @@ else if (command == "help") {
     message.channel.send("Here are a list of commands I support: \n\n" + 
         "`!help`: show this help menu\n" + 
         "`!setActiveChannel`: Sends all future notifications to the channel that you use this command in.\n" +  
-        "`!watch <crypto-symbol> <percentage-change>`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage. \n" +
+        "`!watch <crypto-symbol> (<percentage-change>% | <USD-change>`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage/amount in USD. To specify a percentage threshold, add a percent sign to the end of your number. To specificy a USD threshold, just enter the number without any other symbols.\n" +
         "`!remove <crypto-symbol>`: Stops watching a specified cryptocurrency.\n" + 
         "`!list`: Lists all cryptocurrencies that are currently being watched, and their price fluctuation thresholds.\n" + 
         "`!check <crypto-symbol>`: Checks the price of a specified cryptocurrency in USD.");
 }
 else if (command == "watch") {
     if (args.length == 0) {
-        message.channel.send("Usage: `!watch <symbol> <percentage-change>`. Example command: `!watch BTC 20` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%. ");
+        message.channel.send("Usage: `!watch <symbol> (<percentage-change>% | <USD-change>)`. \nExample percentage command: `!watch BTC 20%` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%)\n" + 
+            "Example absolute amount command: `!watch BTC 30` (this alerts you when the price of BTC fluctuates by 30 USD)");
         return;
     } else if (args.length < 2) {
-        message.channel.send("You need to include a percentage change threshold to alert you of. Example command: `!watch BTC 20` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%.")
+        message.channel.send("You need to include a percentage change or currency amount to alert you of. \nExample command: `!watch BTC 20%` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%)\n" + 
+            "Example absolute amount command: `!watch BTC 30` (this alerts you when the price of BTC fluctuates by 30 USD)");
         return;
     }
-    if (!Number(args[1])) {
-        message.channel.send("\"" + args[1] + "\" is not a number! Example command: `!watch BTC 20` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%.");
+    if (!Number(args[1]) &&  !args[1].endsWith('%')) {
+        message.channel.send("\"" + args[1] + "\" is not a number or a percentage!\nExample percentage command: `!watch BTC 20%` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%)\n" +
+            "Example absolute amount command: `!watch BTC 30` (this alerts you when the price of BTC fluctuates by 30 USD)");
         return;
     }
 
     const symbol = args[0].toUpperCase();
     const coinIndex = saves.coinSymbols.indexOf(symbol);
     if (coinIndex != -1 ) {
-        message.channel.send("Now setting alert threshold for " + symbol + " from " + saves.alertThresholds[coinIndex] + "% to " + args[1] + "%.");
-        saves.alertThresholds[coinIndex] = Math.abs(Number(args[1]));
+        let oldThreshold = saves.alertThresholds[coinIndex];
+        let newThreshold = args[1];
+        if (!oldThreshold.endsWith('%')) {
+            oldThreshold += " USD";
+        }
+        if (!newThreshold.endsWith('%')) {
+            newThreshold += " USD";
+        }
+        message.channel.send("Now setting alert threshold for " + symbol + " from " + oldThreshold + " to " + newThreshold);
+        saves.alertThresholds[coinIndex] = args[1];
         saveConfig();
     } else {
         if (!symbol) {
@@ -199,10 +220,13 @@ else if (command == "watch") {
                 const price = data.data[symbol].quote.USD.price;
                 const name = data.data[symbol].name;
                 saves.coinSymbols.push(symbol);
-                saves.alertThresholds.push(Math.abs(Number(args[1])));
+                saves.alertThresholds.push(args[1]);
                 saves.lastPriceNotified.push(price);
                 saves.lastDateNotified.push(new Date());
-                message.channel.send("Now watching " + name + " (" + args[0].toUpperCase() + ") for price change of " + args[1] + "%");
+                let threshold = saves.alertThresholds[coinIndex];
+                if (!threshold.endsWith('%')) 
+                    threshold += " USD";
+                message.channel.send("Now watching " + name + " (" + args[0].toUpperCase() + ") for price change of " + threshold);
                 client.user.setActivity(saves.coinSymbols.length + " cryptocurrencies", {type: 'WATCHING'});
 		saveConfig();
             }
@@ -238,8 +262,11 @@ else if (command == "debug") {
 }
 else if (command == "check") {
     //console.log(getPrice(args[0]));
+    if (!args[0]) {
+    	message.channel.send("You need to specify a symbol first. Example command: `!check BTC` checks the current price of Bitcoin in USD");
+	return;
+    }
     const symbol = args[0].toUpperCase();
-    if (!symbol) return undefined;
     request.get({url: baseURL + symbol,
         json: true,
         headers: {}}, (err, res, data) => {
@@ -255,7 +282,8 @@ else if (command == "check") {
                 return;
             }
             const price = data.data[symbol].quote.USD.price;
-            message.channel.send("The current price of " + symbol + " is " + price + " USD");
+            const name = data.data[symbol].name;
+            message.channel.send("The current price of " + name + " (" + symbol + ") is " + price + " USD");
         }});  
 
 }
@@ -265,7 +293,10 @@ else if (command == "list") {
     } else {
         var msgtext = "I am currently watching the following currencies: \n\n";
         for (var i = 0; i < saves.coinSymbols.length; i++) {
-            msgtext += saves.coinSymbols[i] + " for a " + saves.alertThresholds[i] + "% change\n";
+            let threshold = saves.alertThresholds[i];
+            if (!threshold.endsWith('%'))
+                threshold += " USD";
+            msgtext += saves.coinSymbols[i] + " for a " + threshold + " change\n";
         }
         message.channel.send(msgtext);
     }
