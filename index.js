@@ -7,6 +7,10 @@ var projectDir = "/home/pi/Desktop/cryptobot/"
 var saveFileName = projectDir + 'storedData.json';
 var ready = false;
 var fail = false;
+var failMsg;
+var coinFail = [];
+var coinFailMsg = [];
+
 
 const client = new Discord.Client();
 client.login(config.BOT_TOKEN);
@@ -39,22 +43,28 @@ function sleep(ms) {
 function handlePriceCheck(i, symbol) {
     request.get({url: baseURL + symbol,
         json: true,
-        headers: {}}, (err, res, data) => {
+        headers: {}}, async (err, res, data) => {
             if (err) {
-                if (fail)
-			        client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+                if (fail) {
+			if (!failMsg)
+			        failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+		}
                 fail = true;
 		        console.error(err);
         } else if (res.statusCode != 200) {
             console.error("Error: Non-OK status received: " + res.statusCode);
-	        if (fail) 
-            	client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
+	        if (fail) {
+			if (!failMsg)
+            			failMsg = await client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
+		}
 	        fail = true;
         } else {
             if (!data.data[symbol]) {
-		        if (fail)
-                    client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
-		        fail = true;
+		        if (coinFail[i]) {
+                    		if (!coinFailMsg[i])
+					coinFailMsg[i] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
+			}
+		        coinFail[i] = true;
                 return;
             }
             const price = data.data[symbol].quote.USD.price;
@@ -70,10 +80,18 @@ function handlePriceCheck(i, symbol) {
                 percentageDifference = Math.abs(difference/saves.lastPriceNotified[i])*100;
             }
 
-
+	    if (failMsg) {
+	    	failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
+		failMsg = undefined;
+	    }
             fail = false;
 
-
+	    if (coinFailMsg[i]) {
+	    	coinFailMsg[i].edit(coinFailMsg[i].content + "\n**Edit: Issue is now resolved!**");
+		coinFailMsg[i] = undefined;
+	    }
+	
+   	    coinFail[i] = false;
 
             if (alertPrice) {
                 if (difference < 0 ) {
@@ -110,6 +128,10 @@ try {
     //console.log("Failed to load configuration");
     console.error(err);
 }
+
+//Initialize fail data
+coinFail = Array(saves.coinSymbols.length).fill(false);
+coinFailMsg = Array(saves.coinSymbols.length).fill(undefined);
 
 //Sometimes (inexplicably) the discord.js module will throw an UnhandledPromiseRejection. Since I have no way of handling this myself, I need to manually crash the program when this happens
 process.on('unhandledRejection', (reason, p) => {
@@ -164,7 +186,7 @@ else if (command == "help") {
     message.channel.send("Here are a list of commands I support: \n\n" + 
         "`!help`: show this help menu\n" + 
         "`!setActiveChannel`: Sends all future notifications to the channel that you use this command in.\n" +  
-        "`!watch <crypto-symbol> (<percentage-change>% | <USD-change>`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage/amount in USD. To specify a percentage threshold, add a percent sign to the end of your number. To specificy a USD threshold, just enter the number without any other symbols.\n" +
+        "`!watch <crypto-symbol> (<percentage-change>% | <USD-change>)`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage/amount in USD. To specify a percentage threshold, add a percent sign to the end of your number. To specify a USD threshold, just enter the number without any other symbols.\n" +
         "`!remove <crypto-symbol>`: Stops watching a specified cryptocurrency.\n" + 
         "`!list`: Lists all cryptocurrencies that are currently being watched, and their price fluctuation thresholds.\n" + 
         "`!check <crypto-symbol>`: Checks the price of a specified cryptocurrency in USD.");
