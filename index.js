@@ -6,7 +6,7 @@ const { exit } = require("process");
 var projectDir = "/home/pi/Desktop/cryptobot/"
 var saveFileName = projectDir + 'storedData.json';
 var ready = false;
-var fail = false;
+var fail = 0;
 var failMsg;
 var coinFail = [];
 var coinFailMsg = [];
@@ -45,26 +45,26 @@ function handlePriceCheck(i, symbol) {
         json: true,
         headers: {}}, async (err, res, data) => {
             if (err) {
-                if (fail) {
+                if (fail > 1) {
 			if (!failMsg)
 			        failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
 		}
-                fail = true;
+                fail += 1;
 		        console.error(err);
         } else if (res.statusCode != 200) {
             console.error("Error: Non-OK status received: " + res.statusCode);
-	        if (fail) {
+	        if (fail > 1) {
 			if (!failMsg)
             			failMsg = await client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
 		}
-	        fail = true;
+	        fail += 1;
         } else {
             if (!data.data[symbol]) {
-		        if (coinFail[i]) {
+		        if (coinFail[i] > 1) {
                     		if (!coinFailMsg[i])
 					coinFailMsg[i] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
 			}
-		        coinFail[i] = true;
+		        coinFail[i] += 1;
                 return;
             }
             const price = data.data[symbol].quote.USD.price;
@@ -84,14 +84,14 @@ function handlePriceCheck(i, symbol) {
 	    	failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
 		failMsg = undefined;
 	    }
-            fail = false;
+            fail = 0;
 
 	    if (coinFailMsg[i]) {
 	    	coinFailMsg[i].edit(coinFailMsg[i].content + "\n**Edit: Issue is now resolved!**");
 		coinFailMsg[i] = undefined;
 	    }
 	
-   	    coinFail[i] = false;
+   	    coinFail[i] = 0;
 
             if (alertPrice) {
                 if (difference < 0 ) {
@@ -130,7 +130,7 @@ try {
 }
 
 //Initialize fail data
-coinFail = Array(saves.coinSymbols.length).fill(false);
+coinFail = Array(saves.coinSymbols.length).fill(0);
 coinFailMsg = Array(saves.coinSymbols.length).fill(undefined);
 
 //Sometimes (inexplicably) the discord.js module will throw an UnhandledPromiseRejection. Since I have no way of handling this myself, I need to manually crash the program when this happens
