@@ -40,74 +40,87 @@ function sleep(ms) {
     return new Promise((resolve) => {setTimeout(resolve, ms)});
 }
 
-function handlePriceCheck(i, symbol) {
-    request.get({url: baseURL + symbol,
+function getCoinInfo(symbol) {
+    return new Promise((resolve) => {request.get({url: baseURL + symbol,
         json: true,
         headers: {}}, async (err, res, data) => {
             if (err) {
-                if (fail > 1) {
-			if (!failMsg)
-			         failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
-		}
-                fail += 1;
-		        console.error(err);
+                console.error(err);
+                resolve(-1);
         } else if (res.statusCode != 200) {
             console.error("Error: Non-OK status received: " + res.statusCode);
-	        if (fail > 1) {
-			if (!failMsg)
-            			failMsg = await client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + "). I'll edit this message once I am able to connect again.");
-		}
-	        fail += 1;
+            resolve(-1);
         } else {
             if (!data.data[symbol]) {
-		        if (coinFail[i] > 1) {
-                    		if (!coinFailMsg[i])
-					coinFailMsg[i] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll keep trying and I will edit this message once I am able to successfully do so.");
+                resolve(-2);
+            } else {
+                resolve(data.data[symbol]);
+            }
+        }
+        resolve(-1);
+    })});
+}
+
+async function handlePriceCheck(symbol) {
+    coinData = await getCoinInfo(symbol);
+    coinIndex = saves.coinSymbols.indexOf(symbol);
+        if (coinData == -1) {
+            if (fail > 1) {
+                if (!failMsg)
+                    failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
+		}
+                fail += 1;
+        } else {
+            if (coinData == -2) {
+		        if (coinFail[coinIndex] > 1) {
+                    		if (!coinFailMsg[coinIndex])
+					coinFailMsg[coinIndex] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll keep trying and I will edit this message once I am able to successfully do so.");
 			}
-		        coinFail[i] += 1;
+		        coinFail[coinIndex] += 1;
                 return;
             }
-            const price = data.data[symbol].quote.USD.price;
-            const difference = price - saves.lastPriceNotified[i];
+            const price = coinData.quote.USD.price;
+            const difference = price - saves.lastPriceNotified[coinIndex];
             var percentageDifference = 0;
             let alertPrice = false;
-            if (saves.alertThresholds[i].endsWith('%')) {
-                percentageDifference = Math.abs(difference/saves.lastPriceNotified[i])*100;
-                let percentageThresold = Number(saves.alertThresholds[i].slice(0, -1));
+            if (saves.alertThresholds[coinIndex].endsWith('%')) {
+                percentageDifference = Math.abs(difference/saves.lastPriceNotified[coinIndex])*100;
+                let percentageThresold = Number(saves.alertThresholds[coinIndex].slice(0, -1));
                 alertPrice = percentageDifference >= percentageThresold;
-            } else if (Math.abs(difference) >= Number(saves.alertThresholds[i])) {
+            } else if (Math.abs(difference) >= Number(saves.alertThresholds[coinIndex])) {
                 alertPrice = true;
-                percentageDifference = Math.abs(difference/saves.lastPriceNotified[i])*100;
+                percentageDifference = Math.abs(difference/saves.lastPriceNotified[coinIndex])*100;
             }
 
 	    if (failMsg) {
 	    	failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
-		failMsg = undefined;
+		    failMsg = undefined;
 	    }
-            fail = 0;
+        
+        fail = 0;
 
-	    if (coinFailMsg[i]) {
-	    	coinFailMsg[i].edit(coinFailMsg[i].content + "\n**Edit: Issue is now resolved!**");
-		coinFailMsg[i] = undefined;
+	    if (coinFailMsg[coinIndex]) {
+	    	coinFailMsg[coinIndex].edit(coinFailMsg[coinIndex].content + "\n**Edit: Issue is now resolved!**");
+		coinFailMsg[coinIndex] = undefined;
 	    }
 	
-   	    coinFail[i] = 0;
+   	    coinFail[coinIndex] = 0;
 
             if (alertPrice) {
                 if (difference < 0 ) {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, a decrease of " +
-                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[i].toLocaleString("en-US"));
+                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleString("en-US"));
                 } else {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, an increase of " +
-                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[i].toLocaleString("en-US"));
+                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleString("en-US"));
                 }
-                saves.lastPriceNotified[i] = price;
-                saves.lastDateNotified[i] = new Date();
+                saves.lastPriceNotified[coinIndex] = price;
+                saves.lastDateNotified[coinIndex] = new Date();
 		        saveConfig();
             }
             
         }
-    })
+    
 }
 
 //Load configuration data
@@ -235,38 +248,32 @@ else if (command == "watch") {
         saves.alertThresholds[coinIndex] = args[1];
         saveConfig();
     } else {
+        let threshold = args[1];
         if (!symbol) {
             message.channel.send("I didn't receive a proper symbol! Please try again.");
+            return;
         }
-        request.get({url: baseURL + symbol,
-            json: true,
-            headers: {}}, (err, res, data) => {
-                if (err) {
-                    client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
-                    console.error(err);
-            } else if (res.statusCode != 200) {
-                console.error("Error: Non-OK status received: " + res.statusCode);
-                message.channel.send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
-            } else {
-                if (!data.data[symbol]) {
-                    message.channel.send("Couldn't find a coin with the symbol: " + symbol);
-                    return;
-                }
-                const price = data.data[symbol].quote.USD.price;
-                const name = data.data[symbol].name;
-                saves.coinSymbols.push(symbol);
-                saves.alertThresholds.push(args[1]);
-                saves.lastPriceNotified.push(price);
-                saves.lastDateNotified.push(new Date());
-                let threshold = args[1];
-                if (!threshold.endsWith('%')) 
-                    threshold += " USD";
-                message.channel.send("Now watching " + name + " (" + args[0].toUpperCase() + ") for price change of " + threshold);
-                client.user.setActivity(saves.coinSymbols.length + " cryptocurrencies", {type: 'WATCHING'});
-		saveConfig();
+        let coinData = await getCoinInfo(symbol);
+        if (coinData == -1) {
+            client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+            console.error(err);
+        } else {
+            if (coinData == -2) {
+                message.channel.send("Couldn't find a coin with the symbol: " + symbol);
+                return;
             }
-            
-        });     
+            const price = coinData.quote.USD.price;
+            const name = coinData.name;
+            saves.coinSymbols.push(symbol);
+            saves.alertThresholds.push(args[1]);
+            saves.lastPriceNotified.push(price);
+            saves.lastDateNotified.push(new Date());
+            if (!threshold.endsWith('%')) 
+                threshold += " USD";
+            message.channel.send("Now watching " + name + " (" + args[0].toUpperCase() + ") for price change of " + threshold);
+            client.user.setActivity(saves.coinSymbols.length + " cryptocurrencies", {type: 'WATCHING'});
+		    saveConfig();
+        }
     }
 }
 else if (command == "remove") {
@@ -296,31 +303,24 @@ else if (command == "debug") {
     message.channel.send(JSON.stringify(saves));
 }
 else if (command == "check") {
-    //console.log(getPrice(args[0]));
     if (!args[0]) {
     	message.channel.send("You need to specify a symbol first. Example command: `!check BTC` checks the current price of Bitcoin in USD");
-	return;
+	    return;
     }
     const symbol = args[0].toUpperCase();
-    request.get({url: baseURL + symbol,
-        json: true,
-        headers: {}}, (err, res, data) => {
-            if (err) {
-                client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
-                console.error(err);
-        } else if (res.statusCode != 200) {
-            console.error("Error: Non-OK status received: " + res.statusCode);
-            message.channel.send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
-        } else {
-            if (!data.data[symbol]) {
-                message.channel.send("Couldn't find a coin with the symbol: " + symbol);
-                return;
-            }
-            const price = data.data[symbol].quote.USD.price;
-            const name = data.data[symbol].name;
-            message.channel.send("The current price of " + name + " (" + symbol + ") is " + price + " USD");
-        }});  
-
+    let coinData = await getCoinInfo(symbol);
+    if (coinData == -1) {
+        client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
+        console.error(err);
+    } else {
+        if (coinData == -2) {
+            message.channel.send("Couldn't find a coin with the symbol: " + symbol);
+            return;
+        }
+        const price = coinData.quote.USD.price;
+        const name = coinData.name;
+        message.channel.send("The current price of " + name + " (" + symbol + ") is " + price + " USD");
+    } 
 }
 else if (command == "list") {
     if (saves.coinSymbols.length == 0) {
@@ -347,18 +347,11 @@ mainLoop();
 async function mainLoop() {
     while (true) {
         for (var i = 0; i < saves.coinSymbols.length && ready; i++) {
-            //console.log("i = " + i);
             const symbol = saves.coinSymbols[i];
-            handlePriceCheck(i, symbol); 
+            handlePriceCheck(symbol);
         }
         await sleep(60000);
         
     }
-    //Check price
-    //Do math
-    //Notify (if necessary)
-    //Sleep for 30 seconds
-
-    //TODO: make sure new times and dates are saved
 }
 
