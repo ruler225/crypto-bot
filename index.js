@@ -47,7 +47,7 @@ function handlePriceCheck(i, symbol) {
             if (err) {
                 if (fail > 1) {
 			if (!failMsg)
-			        failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+			         failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
 		}
                 fail += 1;
 		        console.error(err);
@@ -55,14 +55,14 @@ function handlePriceCheck(i, symbol) {
             console.error("Error: Non-OK status received: " + res.statusCode);
 	        if (fail > 1) {
 			if (!failMsg)
-            			failMsg = await client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + ")");
+            			failMsg = await client.channels.cache.get(saves.lastChannelId).send("Oops! I wasn't able to reach coinmarketcap's servers. (Error code " + res.statusCode + "). I'll edit this message once I am able to connect again.");
 		}
 	        fail += 1;
         } else {
             if (!data.data[symbol]) {
 		        if (coinFail[i] > 1) {
                     		if (!coinFailMsg[i])
-					coinFailMsg[i] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll try again in a bit.");
+					coinFailMsg[i] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + symbol + ". I'll keep trying and I will edit this message once I am able to successfully do so.");
 			}
 		        coinFail[i] += 1;
                 return;
@@ -146,6 +146,19 @@ process.on('unhandledRejection', (reason, p) => {
 	}
 	process.exit(-1);
   });
+
+process.on('uncaughtException', (err) => {
+	console.error(err);
+	if (ready) {
+		try {
+			client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+		} catch (err) {
+			console.error(err);
+			process.exit(-1);
+		}
+	}
+	process.exit(-1);
+});
 
 client.on("ready", function() {
     if (saves.lastChannelId == "") {
@@ -245,7 +258,7 @@ else if (command == "watch") {
                 saves.alertThresholds.push(args[1]);
                 saves.lastPriceNotified.push(price);
                 saves.lastDateNotified.push(new Date());
-                let threshold = saves.alertThresholds[coinIndex];
+                let threshold = args[1];
                 if (!threshold.endsWith('%')) 
                     threshold += " USD";
                 message.channel.send("Now watching " + name + " (" + args[0].toUpperCase() + ") for price change of " + threshold);
@@ -338,7 +351,7 @@ async function mainLoop() {
             const symbol = saves.coinSymbols[i];
             handlePriceCheck(i, symbol); 
         }
-        await sleep(30000);
+        await sleep(60000);
         
     }
     //Check price
