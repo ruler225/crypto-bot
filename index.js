@@ -160,7 +160,7 @@ process.on('unhandledRejection', (reason, p) => {
 	process.exit(-1);
   });
 
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', (err, origin) => {
 	console.error(err);
 	if (ready) {
 		try {
@@ -196,6 +196,14 @@ client.on("ready", function() {
 });
 
 client.on("message", async function(message) {
+if (message.content.toLowerCase().includes("thank you") || message.content.toLowerCase().includes("thanks")) {
+	message.channel.messages.fetch({limit : 1, before : message.id}).then( messages => {
+		if (messages.first().author.id == client.user.id) {
+			message.channel.send("you're welcome homie");
+		}
+	});
+}
+
 if (message.author.bot || !message.content.startsWith(prefix)) return;
 
 const commandBody = message.content.slice(prefix.length);
