@@ -109,10 +109,10 @@ async function handlePriceCheck(symbol) {
             if (alertPrice) {
                 if (difference < 0 ) {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, a decrease of " +
-                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleString("en-US"));
+                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'2-digit', minute:'2-digit'}));
                 } else {
                     client.channels.cache.get(saves.lastChannelId).send(symbol + " PRICE CHANGE ALERT: Price is now " + price + " USD, an increase of " +
-                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleString("en-US"));
+                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'2-digit', minute:'2-digit'}));
                 }
                 saves.lastPriceNotified[coinIndex] = price;
                 saves.lastDateNotified[coinIndex] = new Date();
