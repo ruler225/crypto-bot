@@ -196,6 +196,9 @@ client.on("ready", function() {
 });
 
 client.on("message", async function(message) {
+if (message.author.bot) return;
+
+
 if (message.content.toLowerCase().includes("thank you") || message.content.toLowerCase().includes("thanks")) {
 	message.channel.messages.fetch({limit : 1, before : message.id}).then( messages => {
 		if (messages.first().author.id == client.user.id) {
@@ -204,7 +207,7 @@ if (message.content.toLowerCase().includes("thank you") || message.content.toLow
 	});
 }
 
-if (message.author.bot || !message.content.startsWith(prefix)) return;
+if (!message.content.startsWith(prefix)) return;
 
 const commandBody = message.content.slice(prefix.length);
 const args = commandBody.split(' ');
