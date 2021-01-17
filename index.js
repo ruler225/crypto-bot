@@ -42,18 +42,22 @@ function sleep(ms) {
     return new Promise((resolve) => {setTimeout(resolve, ms)});
 }
 
-function getCoinInfo(slug) {
+function getCoinInfo(slug, logErrors = false) {
     return new Promise((resolve) => {request.get({url: baseURL + slug,
         json: true,
         headers: {}}, async (err, res, data) => {
             if (err) {
-                console.error(err);
+		if (logErrors) console.error(err);
                 resolve(-1);
         } else if (res.statusCode != 200 && res.statusCode != 400) {
-            console.error("Error: Non-OK status received: " + res.statusCode);
+            if (logErrors) console.error("Error: Non-OK status received: " + res.statusCode);
             resolve(-1);
         } else {
             if (!data.data) {
+	 	if (logErrors) {
+			console.error("Received status " + res.statusCode + " with the following data: ");
+			console.error(data);
+		}
                 resolve(-2);
             } else {
                 resolve(Object.values(data.data)[0]);
@@ -64,7 +68,7 @@ function getCoinInfo(slug) {
 }
 
 async function handlePriceCheck(slug) {
-    coinData = await getCoinInfo(slug);
+    coinData = await getCoinInfo(slug, true);
     coinIndex = saves.coinSlugs.indexOf(slug);
         if (coinData == -1) {
             if (fail > 1) {
@@ -110,10 +114,10 @@ async function handlePriceCheck(slug) {
 
             if (alertPrice) {
                 if (difference < 0 ) {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " PRICE CHANGE ALERT: Price is now " + price + " USD, a decrease of " +
+                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
                         Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
                 } else {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " PRICE CHANGE ALERT: Price is now " + price + " USD, an increase of " +
+                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " Price Change Alert: Price is now " + price + " USD, an increase of " +
                         difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
                 }
                 saves.lastPriceNotified[coinIndex] = price;
@@ -228,7 +232,7 @@ else if (command == "help") {
     message.channel.send("Here are a list of commands I support: \n\n" + 
         "`!help`: show this help menu\n" + 
         "`!setActiveChannel`: Sends all future notifications to the channel that you use this command in.\n" +  
-        "`!watch <currency-name> (<percentage-change>% | <USD-change>)`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage/amount in USD. To specify a percentage threshold, add a percent sign to the end of your number. To specify a USD threshold, just enter the number without any other slugs.\n" +
+        "`!watch <currency-name> (<percentage-change>% | <USD-change>)`: Watch a specified crypto currency and notify the active channel when the price changes by the specified percentage/amount in USD. To specify a percentage threshold, add a percent sign to the end of your number. To specify a USD threshold, just enter the number without any other symbols.\n" +
         "`!remove <currency-name>`: Stops watching a specified cryptocurrency.\n" + 
         "`!list`: Lists all cryptocurrencies that are currently being watched, and their price fluctuation thresholds.\n" + 
         "`!check <currency-name>`: Checks the price of a specified cryptocurrency in USD.");
