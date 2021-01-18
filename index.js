@@ -341,8 +341,13 @@ else if (command == "check") {
     }
 
     const inputName = args.join(' ');    
-    const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); //TODO: make sure this is immune to trailing/leading spaces
-    let coinData = await getCoinInfo(slug);
+    const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); 
+    let coinData = undefined;
+    if (!saves.coinData[slug]) {
+    	coinData = await getCoinInfo(slug);
+    } else {
+    	coinData = saves.coinData[slug];
+    }
     if (coinData == -1) {
         client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
     } else {
@@ -350,7 +355,9 @@ else if (command == "check") {
             message.channel.send("Couldn't find a coin with the name: " + inputName);
             return;
         }
-        const price = coinData.quote.USD.price;
+        let price = undefined;
+	if (coinData.quote) price = coinData.quote.USD.price;
+	else price = coinData.lastPriceChecked;
         const name = coinData.name;
         message.channel.send("The current price of " + name + " is " + price + " USD");
     } 
@@ -383,7 +390,7 @@ async function mainLoop() {
         for (slug in saves.coinData) {
             handlePriceCheck(slug);
         }
-        await sleep(10000);
+        await sleep(60000);
         
     }
 }
