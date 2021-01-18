@@ -20,11 +20,7 @@ const baseURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/quotes/late
 var data;
 var saves = {
     lastChannelId: "",
-    coinSlugs: [],
-    alertThresholds: [],
-    lastPriceNotified: [],
-    lastDateNotified: [],
-    coinNames: []
+    coinData: {},
 };
 
 
@@ -34,7 +30,13 @@ function writeCallback(err) {
 }
 
 function saveConfig() {
-    var jsonData = JSON.stringify(saves);
+    //Create copy of existing data and strip any error info
+    var saveObj = JSON.parse(JSON.stringify(saves));
+    for (coin in saveObj.coinData) {
+        delete saveObj.coinData[coin].failStatus;
+        delete saveObj.coinData[coin].failMsg;
+    }
+    var jsonData = JSON.stringify(saveObj);
     var data = fs.writeFile(saveFileName, jsonData, 'utf8', writeCallback);
 }
 
@@ -67,9 +69,16 @@ function getCoinInfo(slug, logErrors = false) {
     })});
 }
 
+function updateStatus() {
+    let length = Object.keys(saves.coinData).length;
+    if (length == 1)
+        client.user.setActivity("1 cryptocurrency", {type: 'WATCHING'});
+    else
+        client.user.setActivity(length + " cryptocurrencies", {type: 'WATCHING'});
+}
+
 async function handlePriceCheck(slug) {
     coinData = await getCoinInfo(slug, true);
-    coinIndex = saves.coinSlugs.indexOf(slug);
         if (coinData == -1) {
             if (fail > 1) {
                 if (!failMsg)
@@ -78,24 +87,24 @@ async function handlePriceCheck(slug) {
                 fail += 1;
         } else {
             if (coinData == -2) {
-		        if (coinFail[coinIndex] > 1) {
-                    		if (!coinFailMsg[coinIndex])
-					coinFailMsg[coinIndex] = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + saves.coinNames[coinIndex] + ". I'll keep trying and I will edit this message once I am able to successfully do so.");
+		        if (saves.coinData[slug].failStatus > 1) {
+                    		if (!saves.coinData[slug].failMsg)
+					saves.coinData[slug].failMsg = await client.channels.cache.get(saves.lastChannelId).send("I was unable to fetch price info for " + saves.coinData[slug].name + ". I'll keep trying and I will edit this message once I am able to successfully do so.");
 			}
-		        coinFail[coinIndex] += 1;
+		        saves.coinData[slug].failStatus += 1;
                 return;
             }
             const price = coinData.quote.USD.price;
-            const difference = price - saves.lastPriceNotified[coinIndex];
+            const difference = price - saves.coinData[slug].lastPriceNotified;
             var percentageDifference = 0;
             let alertPrice = false;
-            if (saves.alertThresholds[coinIndex].endsWith('%')) {
-                percentageDifference = Math.abs(difference/saves.lastPriceNotified[coinIndex])*100;
-                let percentageThresold = Number(saves.alertThresholds[coinIndex].slice(0, -1));
+            if (saves.coinData[slug].alertThreshold.endsWith('%')) {
+                percentageDifference = Math.abs(difference/saves.coinData[slug].lastPriceNotified)*100;
+                let percentageThresold = Number(saves.coinData[slug].alertThreshold.slice(0, -1));
                 alertPrice = percentageDifference >= percentageThresold;
-            } else if (Math.abs(difference) >= Number(saves.alertThresholds[coinIndex])) {
+            } else if (Math.abs(difference) >= Number(saves.coinData[slug].alertThreshold)) {
                 alertPrice = true;
-                percentageDifference = Math.abs(difference/saves.lastPriceNotified[coinIndex])*100;
+                percentageDifference = Math.abs(difference/saves.coinData[slug].lastPriceNotified)*100;
             }
 
 	    if (failMsg) {
@@ -105,26 +114,28 @@ async function handlePriceCheck(slug) {
         
         fail = 0;
 
-	    if (coinFailMsg[coinIndex]) {
-	    	coinFailMsg[coinIndex].edit(coinFailMsg[coinIndex].content + "\n**Edit: Issue is now resolved!**");
-		coinFailMsg[coinIndex] = undefined;
+	    if (saves.coinData[slug].failMsg) { 
+            let msg = saves.coinData[slug].failMsg;
+	    	msg.edit(msg.content + "\n**Edit: Issue is now resolved!**");
+		saves.coinData[slug].failMsg = undefined;
 	    }
 	
-   	    coinFail[coinIndex] = 0;
+   	    saves.coinData[slug].failStatus = 0;
 
             if (alertPrice) {
                 if (difference < 0 ) {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
-                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
+                    client.channels.cache.get(saves.lastChannelId).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
+                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
                 } else {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinNames[coinIndex] + " Price Change Alert: Price is now " + price + " USD, an increase of " +
-                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.lastDateNotified[coinIndex].toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
+                    client.channels.cache.get(saves.lastChannelId).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, an increase of " +
+                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], {day:'numeric', month:'numeric',year:'numeric', hour:'numeric', minute:'numeric'}));
                 }
-                saves.lastPriceNotified[coinIndex] = price;
-                saves.lastDateNotified[coinIndex] = new Date();
-		        saveConfig();
+                saves.coinData[slug].lastPriceNotified = price;
+                saves.coinData[slug].lastDateNotified = new Date();
             }
             
+            saves.coinData[slug].lastPriceChecked = price;
+            saveConfig();
         }
     
 }
@@ -166,18 +177,14 @@ try {
 
 try {
     saves = JSON.parse(data);
-    for (var i = 0; i < saves.lastDateNotified.length; i++) {
-        saves.lastDateNotified[i] = new Date(Date.parse(saves.lastDateNotified[i]));
+    for (coin in saves.coinData) {
+        saves.coinData[coin].failStatus = 0;    //Initialize fail data
+        saves.coinData[coin].lastDateNotified = new Date(Date.parse(saves.coinData[coin].lastDateNotified));
     }
     console.dir(saves)
 } catch (err) {
-    //console.log("Failed to load configuration");
-    console.error(err);
+    console.log("Failed to load configuration. Overwriting with fresh config.");
 }
-
-//Initialize fail data
-coinFail = Array(saves.coinSlugs.length).fill(0);
-coinFailMsg = Array(saves.coinSlugs.length).fill(undefined);
 
 client.on("ready", function() {
     if (saves.lastChannelId == "") {
@@ -198,10 +205,7 @@ client.on("ready", function() {
     });
     }
     ready = true;
-    if (saves.coinSlugs.length == 1)
-        client.user.setActivity(saves.coinSlugs.length + " cryptocurrency", {type: 'WATCHING'});
-    else
-        client.user.setActivity(saves.coinSlugs.length + " cryptocurrencies", {type: 'WATCHING'});
+    updateStatus();
 });
 
 client.on("message", async function(message) {
@@ -256,9 +260,8 @@ else if (command == "watch") {
 
     const inputName = args.slice(0, args.length - 1).join(' ');
     const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); //TODO: make sure this is immune to trailing/leading spaces
-    const coinIndex = saves.coinSlugs.indexOf(slug);
-    if (coinIndex != -1 ) {
-        let oldThreshold = saves.alertThresholds[coinIndex];
+    if (saves.coinData[slug]) {
+        let oldThreshold = saves.coinData[slug].alertThreshold;
         let newThreshold = threshold;
         if (!oldThreshold.endsWith('%')) {
             oldThreshold += " USD";
@@ -266,8 +269,8 @@ else if (command == "watch") {
         if (!newThreshold.endsWith('%')) {
             newThreshold += " USD";
         }
-        message.channel.send("Now setting alert threshold for " + saves.coinNames[coinIndex] + " from " + oldThreshold + " to " + newThreshold);
-        saves.alertThresholds[coinIndex] = threshold;
+        message.channel.send("Now setting alert threshold for " + saves.coinData[slug].name + " from " + oldThreshold + " to " + newThreshold);
+        saves.coinData[slug].alertThreshold = threshold;
         saveConfig();
     } else {
         if (!slug) {
@@ -285,21 +288,22 @@ else if (command == "watch") {
             }
             const price = coinData.quote.USD.price;
             const name = coinData.name;
-            saves.coinSlugs.push(slug);
-            saves.alertThresholds.push(threshold);
-            saves.lastPriceNotified.push(price);
-            saves.lastDateNotified.push(new Date());
-            saves.coinNames.push(name);
-            coinFail.push(0);
-            coinFailMsg.push(undefined);
+            //TODO: test message preservation across process instances
+            saves.coinData[slug] = {
+                id: coinData.id,
+                name: coinData.name,
+                symbol: coinData.symbol,
+                slug: coinData.slug,
+                alertThreshold: threshold,
+                lastPriceNotified: price,
+                lastPriceChecked: price,
+                lastDateNotified: new Date(),
+                failStatus: 0,
+            }
             if (!threshold.endsWith('%')) 
                 threshold += " USD";
             message.channel.send("Now watching " + name + " for price change of " + threshold);
-            if (saves.coinSlugs.length == 1)
-                client.user.setActivity(saves.coinSlugs.length + " cryptocurrency", {type: 'WATCHING'});
-            else
-                client.user.setActivity(saves.coinSlugs.length + " cryptocurrencies", {type: 'WATCHING'});
-
+            updateStatus();
 		    saveConfig();
         }
     }
@@ -312,21 +316,10 @@ else if (command == "remove") {
     const inputName = args.join(' ');
     const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); //TODO: make sure this is immune to trailing/leading spaces
 
-
-    const coinIndex = saves.coinSlugs.indexOf(slug);
-    const name = saves.coinNames[coinIndex];
-    if (coinIndex != -1) {
-        saves.coinSlugs.splice(coinIndex, 1);
-        saves.alertThresholds.splice(coinIndex, 1);
-        saves.lastPriceNotified.splice(coinIndex, 1);
-        saves.lastDateNotified.splice(coinIndex, 1);
-        saves.coinNames.splice(coinIndex, 1);
-        coinFail.splice(coinIndex, 1);
-        coinFailMsg.splice(coinIndex, 1);
-        if (saves.coinSlugs.length == 1)
-            client.user.setActivity(saves.coinSlugs.length + " cryptocurrency", {type: 'WATCHING'});
-        else
-            client.user.setActivity(saves.coinSlugs.length + " cryptocurrencies", {type: 'WATCHING'});
+    if (saves.coinData[slug]) {
+        let name = saves.coinData[slug].name;
+        delete saves.coinData[slug];
+        updateStatus();
         message.channel.send("Okay. I'm no longer watching " + name);
     } else {
         message.channel.send("I'm currently not watching a coin called " + inputName);
@@ -363,15 +356,15 @@ else if (command == "check") {
     } 
 }
 else if (command == "list") {
-    if (saves.coinSlugs.length == 0) {
+    if (Object.keys(saves.coinData).length == 0) {
         message.channel.send("I am currently not watching any currencies!");
     } else {
         var msgtext = "I am currently watching the following currencies: \n\n";
-        for (var i = 0; i < saves.coinSlugs.length; i++) {
-            let threshold = saves.alertThresholds[i];
+        for (slug in saves.coinData) {
+            let threshold = saves.coinData[slug].alertThreshold;
             if (!threshold.endsWith('%'))
                 threshold += " USD";
-            msgtext += saves.coinNames[i] + " for a " + threshold + " change\n";
+            msgtext += saves.coinData[slug].name + " for a " + threshold + " change\n";
         }
         message.channel.send(msgtext);
     }
@@ -387,11 +380,10 @@ mainLoop();
 async function mainLoop() {
     await sleep(5000);
     while (true) {
-        for (var i = 0; i < saves.coinSlugs.length && ready; i++) {
-            const slug = saves.coinSlugs[i];
+        for (slug in saves.coinData) {
             handlePriceCheck(slug);
         }
-        await sleep(60000);
+        await sleep(10000);
         
     }
 }
