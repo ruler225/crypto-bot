@@ -176,6 +176,7 @@ async function handlePriceCheck() {
             }
 
             saves.coinData[slug].lastPriceChecked = price;
+            saves.coinData[slug].lastDateChecked = new Date();
         });
         saveConfig();
     }
@@ -222,6 +223,7 @@ try {
     for (coin in saves.coinData) {
         saves.coinData[coin].failStatus = 0;    //Initialize fail data
         saves.coinData[coin].lastDateNotified = new Date(Date.parse(saves.coinData[coin].lastDateNotified));
+        saves.coinData[coin].lastDateChecked = new Date(Date.parse(saves.coinData[coin].lastDateChecked));
     }
     console.dir(saves)
 } catch (err) {
@@ -340,6 +342,7 @@ client.on("message", async function (message) {
                     lastPriceNotified: price,
                     lastPriceChecked: price,
                     lastDateNotified: new Date(),
+                    lastDateChecked: new Date(),
                     failStatus: 0,
                 }
                 if (!threshold.endsWith('%'))
@@ -398,10 +401,17 @@ client.on("message", async function (message) {
                 return;
             }
             let price = undefined;
-            if (coinData.quote) price = coinData.quote.USD.price;
-            else price = coinData.lastPriceChecked;
             const name = coinData.name;
-            message.channel.send("The current price of " + name + " is " + price + " USD");
+            if (coinData.quote) {
+                price = coinData.quote.USD.price;
+                message.channel.send("The current price of " + name + " is " + price + " USD");
+            } else {
+                price = coinData.lastPriceChecked;
+                const currentDate = new Date();
+                let diff = Math.round((currentDate - coinData.lastDateChecked) / 1000);
+                message.channel.send("The current price of " + name + " is " + price + " USD (last checked " + diff + " seconds ago)");
+            }
+
         }
     }
     else if (command == "list") {
