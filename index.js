@@ -88,17 +88,14 @@ function fetchAllCoinInfo() {
                 if (logErrors) console.error(err);
                 resolve(-1);
             } else if (res.statusCode != 200 && res.statusCode != 400) {
-                if (logErrors) console.error("Error: Non-OK status received: " + res.statusCode);
+                console.error("Error: Non-OK status received: " + res.statusCode);
                 resolve(-1);
             } else {
-                if (!data.data) {
-                    if (logErrors) {
-                        console.error("Received status " + res.statusCode + " with the following data: ");
-                        console.error(data);
-                    }
+                if (!data.data) {                   
+                    console.error("Received status " + res.statusCode + " with the following data: ");
+                    console.error(data);
                     resolve(-2);
                 } else {
-                    //console.log(Object.values(data.data));
                     resolve(Object.values(data.data));
                 }
             }
@@ -409,7 +406,7 @@ client.on("message", async function (message) {
                 price = coinData.lastPriceChecked;
                 const currentDate = new Date();
                 let diff = Math.round((currentDate - coinData.lastDateChecked) / 1000);
-                message.channel.send("The current price of " + name + " is " + price + " USD (last checked " + diff + " seconds ago)");
+                message.channel.send("The current price of " + name + " is " + price + " USD _(last checked " + diff + " seconds ago)_");
             }
 
         }
