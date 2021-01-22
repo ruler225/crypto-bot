@@ -5,15 +5,11 @@ var request = require('request');
 const { exit } = require("process");
 var projectDir = "/home/pi/Desktop/cryptobot/"
 var saveFileName = projectDir + 'storedData.json';
-var ready = false;
 var fail = 0;
 var failMsg;
-var coinFail = [];
-var coinFailMsg = [];
 
 
 const client = new Discord.Client();
-client.login(config.BOT_TOKEN);
 const prefix = "!";
 const baseURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?slug=";
 
@@ -171,27 +167,24 @@ async function handlePriceCheck() {
 //Sometimes (inexplicably) the discord.js module will throw an UnhandledPromiseRejection. Since I have no way of handling this myself, I need to manually crash the program when this happens
 process.on('unhandledRejection', (reason, p) => {
     console.error(reason);
-    if (ready) {
-        try {
-            client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
-        } catch (err) {
-            console.error(err);
-            process.exit(-1);
-        }
+    try {
+        client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
+    } catch (err) {
+        console.error(err);
+        process.exit(-1);
     }
     process.exit(-1);
 });
 
 process.on('uncaughtException', (err, origin) => {
     console.error(err);
-    if (ready) {
-        try {
-            client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
-        } catch (err) {
-            console.error(err);
-            process.exit(-1);
-        }
+    try {
+        client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+    } catch (err) {
+        console.error(err);
+        process.exit(-1);
     }
+
     process.exit(-1);
 });
 
@@ -232,7 +225,6 @@ client.on("ready", function () {
             });
         });
     }
-    ready = true;
     updateStatus();
 });
 
@@ -421,7 +413,7 @@ client.on("message", async function (message) {
 
 mainLoop();
 async function mainLoop() {
-    await sleep(5000);
+    await client.login(config.BOT_TOKEN);
     while (true) {
         handlePriceCheck();
         await sleep(60000);
