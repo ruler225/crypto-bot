@@ -32,10 +32,6 @@ function writeCallback(err) {
 function saveConfig() {
     //Create copy of existing data and strip any error info
     var saveObj = JSON.parse(JSON.stringify(saves));
-    for (coin in saveObj.coinData) {
-        delete saveObj.coinData[coin].failStatus;
-        delete saveObj.coinData[coin].failMsg;
-    }
     var jsonData = JSON.stringify(saveObj);
     var data = fs.writeFile(saveFileName, jsonData, 'utf8', writeCallback);
 }
@@ -152,14 +148,6 @@ async function handlePriceCheck() {
 
             fail = 0;
 
-            if (saves.coinData[slug].failMsg) {
-                let msg = saves.coinData[slug].failMsg;
-                msg.edit(msg.content + "\n**Edit: Issue is now resolved!**");
-                saves.coinData[slug].failMsg = undefined;
-            }
-
-            saves.coinData[slug].failStatus = 0;
-
             if (alertPrice) {
                 if (difference < 0) {
                     client.channels.cache.get(saves.lastChannelId).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
@@ -218,7 +206,6 @@ try {
 try {
     saves = JSON.parse(data);
     for (coin in saves.coinData) {
-        saves.coinData[coin].failStatus = 0;    //Initialize fail data
         saves.coinData[coin].lastDateNotified = new Date(Date.parse(saves.coinData[coin].lastDateNotified));
         saves.coinData[coin].lastDateChecked = new Date(Date.parse(saves.coinData[coin].lastDateChecked));
     }
@@ -340,7 +327,6 @@ client.on("message", async function (message) {
                     lastPriceChecked: price,
                     lastDateNotified: new Date(),
                     lastDateChecked: new Date(),
-                    failStatus: 0,
                 }
                 if (!threshold.endsWith('%'))
                     threshold += " USD";
