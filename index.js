@@ -310,7 +310,7 @@ client.on("message", async function (message) {
             if (!newThreshold.endsWith('%')) {
                 newThreshold += " USD";
             }
-            message.channel.send("Now setting alert threshold for " + saves.coinData[slug].name + " from " + oldThreshold + " to " + newThreshold);
+            message.channel.send("Now setting alert threshold for " + saves.coinData[slug].name + " (" + saves.coinData[slug].symbol + ") from " + oldThreshold + " to " + newThreshold);
             saves.coinData[slug].alertThreshold = threshold;
             saveConfig();
         } else {
@@ -344,7 +344,7 @@ client.on("message", async function (message) {
                 }
                 if (!threshold.endsWith('%'))
                     threshold += " USD";
-                message.channel.send("Now watching " + name + " for price change of " + threshold);
+                message.channel.send("Now watching " + name + " (" + coinData.symbol + ") for price change of " + threshold);
                 updateStatus();
                 saveConfig();
             }
@@ -360,9 +360,10 @@ client.on("message", async function (message) {
 
         if (saves.coinData[slug]) {
             let name = saves.coinData[slug].name;
+	    let symbol = saves.coinData[slug].symbol;
             delete saves.coinData[slug];
             updateStatus();
-            message.channel.send("Okay. I'm no longer watching " + name);
+            message.channel.send("Okay. I'm no longer watching " + name + " (" + symbol + ")");
         } else {
             message.channel.send("I'm currently not watching a coin called " + inputName);
         }
@@ -374,7 +375,7 @@ client.on("message", async function (message) {
         message.channel.send("Okay. From now on I'll only send updates to this channel.");
     }
     else if (command == "debug") {
-        message.channel.send(JSON.stringify(saves));
+        message.channel.send("```json\n" + JSON.stringify(saves) + "\n```");
     }
     else if (command == "check") {
         if (!args[0]) {
@@ -401,12 +402,12 @@ client.on("message", async function (message) {
             const name = coinData.name;
             if (coinData.quote) {
                 price = coinData.quote.USD.price;
-                message.channel.send("The current price of " + name + " is " + price + " USD");
+                message.channel.send("The current price of " + name + " (" + coinData.symbol + ") is " + price + " USD");
             } else {
                 price = coinData.lastPriceChecked;
                 const currentDate = new Date();
                 let diff = Math.round((currentDate - coinData.lastDateChecked) / 1000);
-                message.channel.send("The current price of " + name + " is " + price + " USD _(last checked " + diff + " seconds ago)_");
+                message.channel.send("The current price of " + name + " (" + coinData.symbol + ") is " + price + " USD _(last checked " + diff + " seconds ago)_");
             }
 
         }
@@ -420,7 +421,7 @@ client.on("message", async function (message) {
                 let threshold = saves.coinData[slug].alertThreshold;
                 if (!threshold.endsWith('%'))
                     threshold += " USD";
-                msgtext += saves.coinData[slug].name + " for a " + threshold + " change\n";
+                msgtext += saves.coinData[slug].name + " (" + saves.coinData[slug].symbol + ") for a " + threshold + " change\n";
             }
             message.channel.send(msgtext);
         }
