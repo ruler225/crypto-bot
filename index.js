@@ -77,7 +77,7 @@ function fetchAllCoinInfo() {
             headers: {}
         }, async (err, res, data) => {
             if (err) {
-                if (logErrors) console.error(err);
+                console.error(err);
                 resolve(-1);
             } else if (res.statusCode != 200 && res.statusCode != 400) {
                 console.error("Error: Non-OK status received: " + res.statusCode);
