@@ -101,58 +101,70 @@ function updateStatus() {
         client.user.setActivity(length + " cryptocurrencies", { type: 'WATCHING' });
 }
 
+async function sendErrors(code) {
+    if (code == -1) {
+        return await client.users.cache.get(config.DEVELOPER_ID).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
+    } else if (code == -2) {
+        return await client.users.cache.get(config.DEVELOPER_ID).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
+    }
+}
+
 async function handlePriceCheck() {
     let data = await fetchAllCoinInfo();
     if (data == -1) {
         if (fail > 1) {
-            if (!failMsg)
-                failMsg = await client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
+            if (!failMsg) {
+                failMsg = sendErrors(-1);
+                client.user.setStatus('invisible');
+            }
         }
         fail += 1;
     } else {
         if (data == -2) {
             if (fail > 1) {
                 if (!failMsg)
-                    failMsg = await client.channels.cache.get(saves.activeChannel).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
+                    failMsg = sendErrors(-2);
             }
             fail += 1;
             return;
         }
-        //console.log(data);
+
         data.forEach(coinData => {
             const slug = coinData.slug;
             const price = coinData.quote.USD.price;
-            const difference = price - saves.coinData[slug].lastPriceNotified;
-            var percentageDifference = 0;
-            let alertPrice = false;
-            if (saves.coinData[slug].alertThreshold.endsWith('%')) {
-                percentageDifference = Math.abs(difference / saves.coinData[slug].lastPriceNotified) * 100;
-                let percentageThresold = Number(saves.coinData[slug].alertThreshold.slice(0, -1));
-                alertPrice = percentageDifference >= percentageThresold;
-            } else if (Math.abs(difference) >= Number(saves.coinData[slug].alertThreshold)) {
-                alertPrice = true;
-                percentageDifference = Math.abs(difference / saves.coinData[slug].lastPriceNotified) * 100;
-            }
 
             if (failMsg) {
                 failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
                 failMsg = undefined;
+                client.user.setStatus('online');
             }
 
             fail = 0;
 
-            if (alertPrice) {
-                if (difference < 0) {
-                    client.channels.cache.get(saves.activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
-                        Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
+            for (guildID in saves.coinData[slug].watchedBy) {
+                const difference = price - saves.guildData[guildID].coinConfig[slug].lastDateNotified;
+                const percentageDifference = Math.abs(difference / saves.guildData[guildID].coinConfig[slug].lastPriceNotified) * 100;
+                let alertPrice = false;
+                if (saves.guildData[guildID].coinConfig[slug].alertThreshold.endsWith('%')) {
+                    let percentageThreshold = Number(saves.guildData[guildID].coinConfig[slug].alertThreshold.slice(0, -1));
+                    alertPrice = percentageDifference >= percentageThresold;
                 } else {
-                    client.channels.cache.get(saves.activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, an increase of " +
-                        difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
+                    alertPrice = Math.abs(difference) >= Number(saves.guildData[guildID].coinConfig[slug].alertThreshold);
                 }
-                saves.coinData[slug].lastPriceNotified = price;
-                saves.coinData[slug].lastDateNotified = new Date();
-            }
+            
 
+                if (alertPrice) {
+                    if (difference < 0) {
+                        client.channels.cache.get(saves.guildData[guildID].activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
+                            Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.guildData[guildID].coinConfig[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
+                    } else {
+                        client.channels.cache.get(saves.guildData[guildID].activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, an increase of " +
+                            difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.guildData[guildID].coinConfig[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
+                    }
+                    saves.guildData[guildID].coinConfig[slug].lastPriceNotified = price;
+                    saves.guildData[guildID].coinConfig[slug].lastDateNotified = new Date();
+                }
+            }
             saves.coinData[slug].lastPriceChecked = price;
             saves.coinData[slug].lastDateChecked = new Date();
         });
