@@ -80,7 +80,7 @@ function fetchAllCoinInfo() {
                 console.error("Error: Non-OK status received: " + res.statusCode);
                 resolve(-1);
             } else {
-                if (!data.data) {                   
+                if (!data.data) {
                     console.error("Received status " + res.statusCode + " with the following data: ");
                     console.error(data);
                     resolve(-2);
@@ -220,13 +220,13 @@ client.on("ready", function () {
                 } else {
                     return true;
                 }
-                client.channels.cache.get(guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " + 
+                client.channels.cache.get(guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " +
                     "I will be sending all of my updates to this channel from now on, " +
-                   "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
+                    "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
                 return false;
             });
 
-        console.log("initialized a new guild!");
+            console.log("initialized a new guild!");
         }
     });
 
@@ -247,9 +247,9 @@ client.on("ready", function () {
                     } else {
                         return true;
                     }
-                    client.channels.cache.get(guildData[guildID].activeChannel).send("The channel I previously sent updates to has either been deleted or is inaccessible by me. " + 
+                    client.channels.cache.get(guildData[guildID].activeChannel).send("The channel I previously sent updates to has either been deleted or is inaccessible by me. " +
                         "From now on I will be sending my updates to this channel. " +
-                       "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
+                        "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
                     return false;
                 });
             }
@@ -272,13 +272,14 @@ client.on("message", async function (message) {
         });
     }
 
-    const guildID = message.guild.id;
 
     if (!message.content.startsWith(prefix)) return;
 
     const commandBody = message.content.slice(prefix.length);
     const args = commandBody.split(' ');
     const command = args.shift().toLowerCase();
+    const guildID = message.guild.id;
+    let guildData = saves.guildData[guildID];
 
     if (command == "hello") {
         message.reply("Hello there good sir!");
@@ -313,9 +314,9 @@ client.on("message", async function (message) {
         }
 
         const inputName = args.slice(0, args.length - 1).join(' ');
-        const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); //TODO: make sure this is immune to trailing/leading spaces
-        if (saves.coinData[slug]) {
-            let oldThreshold = saves.coinData[slug].alertThreshold;
+        const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-");
+        if (guildData.coinConfig[slug]) {
+            let oldThreshold = guildData.coinConfig[slug].alertThreshold;
             let newThreshold = threshold;
             if (!oldThreshold.endsWith('%')) {
                 oldThreshold += " USD";
@@ -324,65 +325,78 @@ client.on("message", async function (message) {
                 newThreshold += " USD";
             }
             message.channel.send("Now setting alert threshold for " + saves.coinData[slug].name + " (" + saves.coinData[slug].symbol + ") from " + oldThreshold + " to " + newThreshold);
-            saves.coinData[slug].alertThreshold = threshold;
+            guildData.coinConfig[slug].alertThreshold = threshold;
             saveConfig();
         } else {
             if (!slug) {
                 message.channel.send("I didn't receive a proper name! Please try again.");
                 return;
             }
-            let coinData = await getCoinInfo(slug);
-            if (coinData == -1) {
-                client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
-                console.error(err);
-            } else {
-                if (coinData == -2) {
+            let coinData = saves.coinData[slug];
+            if (!coinData) {
+                coinData = await getCoinInfo(slug);
+                if (coinData == -1) {
+                    message.channel.send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+                    console.error(err);
+                    return;
+                } else if (coinData == -2) {
                     message.channel.send("Couldn't find a coin with the name: " + inputName);
                     return;
                 }
-                const price = coinData.quote.USD.price;
-                const name = coinData.name;
-                //TODO: test message preservation across process instances
+
                 saves.coinData[slug] = {
                     id: coinData.id,
                     name: coinData.name,
                     symbol: coinData.symbol,
                     slug: coinData.slug,
-                    alertThreshold: threshold,
-                    lastPriceNotified: price,
-                    lastPriceChecked: price,
-                    lastDateNotified: new Date(),
+                    lastPriceChecked: coinData.quote.USD.price,
                     lastDateChecked: new Date(),
+                    watchedBy: [guildID]
                 }
-                if (!threshold.endsWith('%'))
-                    threshold += " USD";
-                message.channel.send("Now watching " + name + " (" + coinData.symbol + ") for price change of " + threshold);
-                updateStatus();
-                saveConfig();
+            } else {
+                coinData.watchedBy.push(guildID);
             }
+            let price = saves.coinData[slug].price;
+            let name = coinData.name;
+
+            guildData.coinConfig[slug] = {
+                alertThreshold: threshold,
+                lastPriceNotified: price,
+                lastDateNotified: new Date(),
+            }
+
+            if (!threshold.endsWith('%'))
+                threshold += " USD";
+            message.channel.send("Now watching " + name + " (" + coinData.symbol + ") for price change of " + threshold);
+            updateStatus();
+            saveConfig();
         }
-    }
-    else if (command == "remove") {
+
+    } else if (command == "remove") {
         if (args.length < 1) {
             message.channel.send("Usage: `!remove <currency-name>`");
             return;
         }
         const inputName = args.join(' ');
-        const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-"); //TODO: make sure this is immune to trailing/leading spaces
+        const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-");
 
-        if (saves.coinData[slug]) {
+        if (guildData.coinConfig[slug]) {
             let name = saves.coinData[slug].name;
-	    let symbol = saves.coinData[slug].symbol;
-            delete saves.coinData[slug];
-            updateStatus();
+            let symbol = saves.coinData[slug].symbol;
+            let guildIndex = saves.coinData[slug].watchedBy.indexOf(guildID);
+            saves.coinData[slug].watchedBy.splice(guildIndex, 1);
+            delete guildData.coinConfig[slug];
+            if (saves.coinData[slug].watchedBy.length == 0)
+                delete saves.coinData[slug];
             message.channel.send("Okay. I'm no longer watching " + name + " (" + symbol + ")");
         } else {
             message.channel.send("I'm currently not watching a coin called " + inputName);
         }
+        updateStatus();
         saveConfig();
     }
     else if (command == "setactivechannel") {
-        saves.activeChannel = message.channel.id;
+        guildData.activeChannel = message.channel.id;
         saveConfig();
         message.channel.send("Okay. From now on I'll only send updates to this channel.");
     }
@@ -428,12 +442,12 @@ client.on("message", async function (message) {
         }
     }
     else if (command == "list") {
-        if (Object.keys(saves.coinData).length == 0) {
+        if (Object.keys(guildData.coinConfig).length == 0) {
             message.channel.send("I am currently not watching any currencies!");
         } else {
-            var msgtext = "I am currently watching the following currencies: \n\n";
-            for (slug in saves.coinData) {
-                let threshold = saves.coinData[slug].alertThreshold;
+            let msgtext = "I am currently watching the following currencies: \n\n";
+            for (slug in guildData.coinConfig) {
+                let threshold = guildData.coinConfig[slug].alertThreshold;
                 if (!threshold.endsWith('%'))
                     threshold += " USD";
                 msgtext += saves.coinData[slug].name + " (" + saves.coinData[slug].symbol + ") for a " + threshold + " change\n";
@@ -443,7 +457,7 @@ client.on("message", async function (message) {
     } else {
         return;
     }
-    if (message.channel.id != saves.activeChannel) {
+    if (message.channel.id != guildData.activeChannel) {
         message.channel.send("Warning: this is not my active channel! If you would like to receive future updates in this channel, type `!setActiveChannel`.");
     }
 });
