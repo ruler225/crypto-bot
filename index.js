@@ -15,20 +15,17 @@ const baseURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/quotes/late
 
 var data;
 var saves = {
-    lastChannelId: "",
+    guildData: {},
     coinData: {},
 };
 
 
 function writeCallback(err) {
     if (err) throw err;
-    //console.log("Wrote data to configuration file.");
 }
 
 function saveConfig() {
-    //Create copy of existing data and strip any error info
-    var saveObj = JSON.parse(JSON.stringify(saves));
-    var jsonData = JSON.stringify(saveObj);
+    var jsonData = JSON.stringify(saves);
     var data = fs.writeFile(saveFileName, jsonData, 'utf8', writeCallback);
 }
 
@@ -109,14 +106,14 @@ async function handlePriceCheck() {
     if (data == -1) {
         if (fail > 1) {
             if (!failMsg)
-                failMsg = await client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
+                failMsg = await client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
         }
         fail += 1;
     } else {
         if (data == -2) {
             if (fail > 1) {
                 if (!failMsg)
-                    failMsg = await client.channels.cache.get(saves.lastChannelId).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
+                    failMsg = await client.channels.cache.get(saves.activeChannel).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
             }
             fail += 1;
             return;
@@ -146,10 +143,10 @@ async function handlePriceCheck() {
 
             if (alertPrice) {
                 if (difference < 0) {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
+                    client.channels.cache.get(saves.activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, a decrease of " +
                         Math.abs(difference) + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
                 } else {
-                    client.channels.cache.get(saves.lastChannelId).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, an increase of " +
+                    client.channels.cache.get(saves.activeChannel).send(saves.coinData[slug].name + " Price Change Alert: Price is now " + price + " USD, an increase of " +
                         difference + " USD (" + percentageDifference.toFixed(1) + "%) since " + saves.coinData[slug].lastDateNotified.toLocaleTimeString([], { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }));
                 }
                 saves.coinData[slug].lastPriceNotified = price;
@@ -168,7 +165,7 @@ async function handlePriceCheck() {
 process.on('unhandledRejection', (reason, p) => {
     console.error(reason);
     try {
-        client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
+        client.channels.cache.get(saves.activeChannel).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -179,7 +176,7 @@ process.on('unhandledRejection', (reason, p) => {
 process.on('uncaughtException', (err, origin) => {
     console.error(err);
     try {
-        client.channels.cache.get(saves.lastChannelId).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+        client.channels.cache.get(saves.activeChannel).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -208,23 +205,58 @@ try {
 }
 
 client.on("ready", function () {
-    if (saves.lastChannelId == "") {
-        const Guilds = client.guilds.cache;
-        Guilds.forEach(guild => {
-            //console.log(guild);
+    const Guilds = client.guilds.cache;
+    //Update database with current guilds
+    Guilds.forEach(guild => {
+        if (!guildData[guild.id]) {
+            guildData[guild.id] = {
+                activeChannel = "",
+                coinConfig = {}
+            };
+            //Set a default active channel
             guild.channels.cache.every(channel => {
                 if (channel.type == "text") {
-                    saves.lastChannelId = channel.id;
+                    guildData[guild.id].activeChannel = channel.id;
                 } else {
                     return true;
                 }
-                //client.channels.cache.get(saves.lastChannelId).send("Hello! I'm now up and running! I will be sending all of my updates to this channel from now on. " +
-                //   "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`. " +
-                //   "For a list of commands, type `!help`.");
+                client.channels.cache.get(guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " + 
+                    "I will be sending all of my updates to this channel from now on, " +
+                   "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
                 return false;
             });
-        });
+
+        console.log("initialized a new guild!");
+        }
+    });
+
+    //Update deleted/inaccessible channels/guilds already in the database
+    for (guildID in saves.guildData) {
+        const currentGuild = client.guilds.cache.get(guildID);
+        if (!currentGuild) {
+            delete saves.guildData[guildID];
+        } else if (!currentGuild.available) {
+            delete saves.guildData[guildID];
+        } else {
+            //Check channels
+            const currentChannel = client.channels.cache.get(guildData[guildID].activeChannel);
+            if (!currentChannel) {
+                currentGuild.channels.cache.every(channel => {
+                    if (channel.type == "text") {
+                        guildData[guildID].activeChannel = channel.id;
+                    } else {
+                        return true;
+                    }
+                    client.channels.cache.get(guildData[guildID].activeChannel).send("The channel I previously sent updates to has either been deleted or is inaccessible by me. " + 
+                        "From now on I will be sending my updates to this channel. " +
+                       "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
+                    return false;
+                });
+            }
+
+        }
     }
+    saveConfig();
     updateStatus();
 });
 
@@ -239,6 +271,8 @@ client.on("message", async function (message) {
             }
         });
     }
+
+    const guildID = message.guild.id;
 
     if (!message.content.startsWith(prefix)) return;
 
@@ -299,7 +333,7 @@ client.on("message", async function (message) {
             }
             let coinData = await getCoinInfo(slug);
             if (coinData == -1) {
-                client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+                client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
                 console.error(err);
             } else {
                 if (coinData == -2) {
@@ -348,12 +382,15 @@ client.on("message", async function (message) {
         saveConfig();
     }
     else if (command == "setactivechannel") {
-        saves.lastChannelId = message.channel.id;
+        saves.activeChannel = message.channel.id;
         saveConfig();
         message.channel.send("Okay. From now on I'll only send updates to this channel.");
     }
     else if (command == "debug") {
-        message.channel.send("```json\n" + JSON.stringify(saves) + "\n```");
+        if (message.author.id == config.DEVELOPER_ID)
+            message.channel.send("```json\n" + JSON.stringify(saves) + "\n```");
+        else
+            message.channel.send("For privacy reasons, only the developer is permitted to view debug data!");
     }
     else if (command == "check") {
         if (!args[0]) {
@@ -370,7 +407,7 @@ client.on("message", async function (message) {
             coinData = saves.coinData[slug];
         }
         if (coinData == -1) {
-            client.channels.cache.get(saves.lastChannelId).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
+            client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
         } else {
             if (coinData == -2) {
                 message.channel.send("Couldn't find a coin with the name: " + inputName);
@@ -406,7 +443,7 @@ client.on("message", async function (message) {
     } else {
         return;
     }
-    if (message.channel.id != saves.lastChannelId) {
+    if (message.channel.id != saves.activeChannel) {
         message.channel.send("Warning: this is not my active channel! If you would like to receive future updates in this channel, type `!setActiveChannel`.");
     }
 });
