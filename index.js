@@ -103,9 +103,9 @@ function updateStatus() {
 
 async function sendErrors(code) {
     if (code == -1) {
-        return await client.users.cache.get(config.DEVELOPER_ID).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
+        return (await client.users.fetch(config.DEVELOPER_ID)).send("There was a problem connecting to coinmarketcap's servers. I'll edit this message once I am able to connect again.");
     } else if (code == -2) {
-        return await client.users.cache.get(config.DEVELOPER_ID).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
+        return (await client.users.fetch(config.DEVELOPER_ID)).send("Info for one or more currencies currently being watched cannot be fetched. I'll keep trying and I will edit this message once I am able to successfully do so.");
     }
 }
 
@@ -129,29 +129,27 @@ async function handlePriceCheck() {
             return;
         }
 
+        if (failMsg) {
+            failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
+            failMsg = undefined;
+            client.user.setStatus('online');
+        }
+
+        fail = 0;
+
         data.forEach(coinData => {
             const slug = coinData.slug;
             const price = coinData.quote.USD.price;
-
-            if (failMsg) {
-                failMsg.edit(failMsg.content + "\n**Edit: Issue is now resolved!**");
-                failMsg = undefined;
-                client.user.setStatus('online');
-            }
-
-            fail = 0;
-
-            for (guildID in saves.coinData[slug].watchedBy) {
-                const difference = price - saves.guildData[guildID].coinConfig[slug].lastDateNotified;
+            saves.coinData[slug].watchedBy.forEach(guildID => {
+                const difference = price - saves.guildData[guildID].coinConfig[slug].lastPriceNotified;
                 const percentageDifference = Math.abs(difference / saves.guildData[guildID].coinConfig[slug].lastPriceNotified) * 100;
                 let alertPrice = false;
                 if (saves.guildData[guildID].coinConfig[slug].alertThreshold.endsWith('%')) {
                     let percentageThreshold = Number(saves.guildData[guildID].coinConfig[slug].alertThreshold.slice(0, -1));
-                    alertPrice = percentageDifference >= percentageThresold;
+                    alertPrice = percentageDifference >= percentageThreshold;
                 } else {
                     alertPrice = Math.abs(difference) >= Number(saves.guildData[guildID].coinConfig[slug].alertThreshold);
                 }
-            
 
                 if (alertPrice) {
                     if (difference < 0) {
@@ -164,7 +162,7 @@ async function handlePriceCheck() {
                     saves.guildData[guildID].coinConfig[slug].lastPriceNotified = price;
                     saves.guildData[guildID].coinConfig[slug].lastDateNotified = new Date();
                 }
-            }
+            });
             saves.coinData[slug].lastPriceChecked = price;
             saves.coinData[slug].lastDateChecked = new Date();
         });
@@ -177,7 +175,7 @@ async function handlePriceCheck() {
 process.on('unhandledRejection', (reason, p) => {
     console.error(reason);
     try {
-        client.channels.cache.get(saves.activeChannel).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
+        client.users.fetch(config.DEVELOPER_ID).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -188,7 +186,7 @@ process.on('unhandledRejection', (reason, p) => {
 process.on('uncaughtException', (err, origin) => {
     console.error(err);
     try {
-        client.channels.cache.get(saves.activeChannel).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+        client.users.fetch(config.DEVELOPER_ID).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -208,37 +206,40 @@ try {
 try {
     saves = JSON.parse(data);
     for (coin in saves.coinData) {
-        saves.coinData[coin].lastDateNotified = new Date(Date.parse(saves.coinData[coin].lastDateNotified));
         saves.coinData[coin].lastDateChecked = new Date(Date.parse(saves.coinData[coin].lastDateChecked));
+    }
+    for (guild in saves.guildData) {
+        for (coin in saves.guildData[guild].coinConfig) {
+            saves.guildData[guild].coinConfig[coin].lastDateNotified = new Date(Date.parse(saves.guildData[guild].coinConfig[coin].lastDateNotified));
+        }
     }
     console.dir(saves)
 } catch (err) {
     console.log("Failed to load configuration. Overwriting with fresh config.");
+    console.error(err);
 }
 
 client.on("ready", function () {
     const Guilds = client.guilds.cache;
     //Update database with current guilds
     Guilds.forEach(guild => {
-        if (!guildData[guild.id]) {
-            guildData[guild.id] = {
-                activeChannel = "",
-                coinConfig = {}
+        if (!saves.guildData[guild.id]) {
+            saves.guildData[guild.id] = {
+                activeChannel: "",
+                coinConfig: {}
             };
             //Set a default active channel
             guild.channels.cache.every(channel => {
                 if (channel.type == "text") {
-                    guildData[guild.id].activeChannel = channel.id;
+                    saves.guildData[guild.id].activeChannel = channel.id;
                 } else {
                     return true;
                 }
-                client.channels.cache.get(guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " +
+                client.channels.cache.get(saves.guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " +
                     "I will be sending all of my updates to this channel from now on, " +
                     "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
                 return false;
             });
-
-            console.log("initialized a new guild!");
         }
     });
 
@@ -251,7 +252,7 @@ client.on("ready", function () {
             delete saves.guildData[guildID];
         } else {
             //Check channels
-            const currentChannel = client.channels.cache.get(guildData[guildID].activeChannel);
+            const currentChannel = client.channels.cache.get(saves.guildData[guildID].activeChannel);
             if (!currentChannel) {
                 currentGuild.channels.cache.every(channel => {
                     if (channel.type == "text") {
@@ -275,7 +276,6 @@ client.on("ready", function () {
 client.on("message", async function (message) {
     if (message.author.bot) return;
 
-
     if (message.content.toLowerCase().includes("thank you") || message.content.toLowerCase().includes("thanks")) {
         message.channel.messages.fetch({ limit: 1, before: message.id }).then(messages => {
             if (messages.first().author.id == client.user.id) {
@@ -290,10 +290,12 @@ client.on("message", async function (message) {
     const commandBody = message.content.slice(prefix.length);
     const args = commandBody.split(' ');
     const command = args.shift().toLowerCase();
-    const guildID = message.guild.id;
+    let guildID = undefined;
+    if (message.guild) guildID = message.guild.id;
     let guildData = saves.guildData[guildID];
 
     if (command == "hello") {
+        message.author.send("sup");
         message.reply("Hello there good sir!");
     }
     else if (command == "channel") {
@@ -368,7 +370,7 @@ client.on("message", async function (message) {
             } else {
                 coinData.watchedBy.push(guildID);
             }
-            let price = saves.coinData[slug].price;
+            let price = saves.coinData[slug].lastPriceChecked;
             let name = coinData.name;
 
             guildData.coinConfig[slug] = {
@@ -469,8 +471,11 @@ client.on("message", async function (message) {
     } else {
         return;
     }
-    if (message.channel.id != guildData.activeChannel) {
-        message.channel.send("Warning: this is not my active channel! If you would like to receive future updates in this channel, type `!setActiveChannel`.");
+
+    if (guildData) {
+        if (message.channel.id != guildData.activeChannel) {
+            message.channel.send("Warning: this is not my active channel! If you would like to receive future updates in this channel, type `!setActiveChannel`.");
+        }
     }
 });
 
@@ -478,9 +483,9 @@ mainLoop();
 async function mainLoop() {
     await client.login(config.BOT_TOKEN);
     while (true) {
-        handlePriceCheck();
+        if (Object.keys(saves.coinData).length > 0)
+            handlePriceCheck();
         await sleep(60000);
-
     }
 }
 
