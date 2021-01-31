@@ -172,10 +172,10 @@ async function handlePriceCheck() {
 }
 
 //Sometimes (inexplicably) the discord.js module will throw an UnhandledPromiseRejection. Since I have no way of handling this myself, I need to manually crash the program when this happens
-process.on('unhandledRejection', (reason, p) => {
+process.on('unhandledRejection', async (reason, p) => {
     console.error(reason);
     try {
-        client.users.fetch(config.DEVELOPER_ID).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
+        (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -183,10 +183,10 @@ process.on('unhandledRejection', (reason, p) => {
     process.exit(-1);
 });
 
-process.on('uncaughtException', (err, origin) => {
+process.on('uncaughtException', async (err, origin) => {
     console.error(err);
     try {
-        client.users.fetch(config.DEVELOPER_ID).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+        (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
     } catch (err) {
         console.error(err);
         process.exit(-1);
