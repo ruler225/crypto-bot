@@ -219,58 +219,120 @@ try {
     console.error(err);
 }
 
+function deleteGuild(guildID) {
+    for (slug in saves.guildData[guildID].coinConfig) {
+        let guildIndex = saves.coinData[slug].watchedBy.indexOf(guildID);
+        saves.coinData[slug].watchedBy.splice(guildIndex, 1);
+        if (saves.coinData[slug].watchedBy.length == 0)
+            delete saves.coinData[slug];
+    }
+    delete saves.guildData[guildID];
+}
+
+
+function createGuild(guild) {
+    saves.guildData[guild.id] = {
+        activeChannel: "",
+        coinConfig: {}
+    };
+    //Set a default active channel
+    guild.channels.cache.every(channel => {
+        const permissions = channel.permissionsFor(client.user);
+        if (channel.type == "text" && permissions.has('SEND_MESSAGES') && permissions.has('VIEW_CHANNEL')) {
+            saves.guildData[guild.id].activeChannel = channel.id;
+        } else {
+            return true;
+        }
+        client.channels.cache.get(saves.guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " +
+            "I will be sending all of my updates to this channel from now on, " +
+            "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
+        return false;
+    });
+    //No accessible channels available, leave guild
+    if (saves.guildData[guild.id].activeChannel == "") {
+        guild.leave();
+    }
+}
+
+
+
+function findNewActiveChannel(guild) {
+    saves.guildData[guild.id].activeChannel = "";
+    guild.channels.cache.every(channel => {
+        const permissions = channel.permissionsFor(client.user);
+        if (channel.type == "text" && permissions.has("SEND_MESSAGES") && permissions.has('VIEW_CHANNEL')) {
+            saves.guildData[guildID].activeChannel = channel.id;
+        } else {
+            return true;
+        }
+        client.channels.cache.get(saves.guildData[guildID].activeChannel).send("The channel I previously sent updates to has either been deleted or is inaccessible by me. " +
+            "From now on I will be sending my updates to this channel. " +
+            "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
+        return false;
+    });
+}
+
 client.on("ready", function () {
     const Guilds = client.guilds.cache;
     //Update database with current guilds
     Guilds.forEach(guild => {
         if (!saves.guildData[guild.id]) {
-            saves.guildData[guild.id] = {
-                activeChannel: "",
-                coinConfig: {}
-            };
-            //Set a default active channel
-            guild.channels.cache.every(channel => {
-                if (channel.type == "text") {
-                    saves.guildData[guild.id].activeChannel = channel.id;
-                } else {
-                    return true;
-                }
-                client.channels.cache.get(saves.guildData[guild.id].activeChannel).send("Thank you for adding me to your server! To get started with a list of commands, type `!help`.\n\n " +
-                    "I will be sending all of my updates to this channel from now on, " +
-                    "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
-                return false;
-            });
+            createGuild(guild);
         }
     });
 
     //Update deleted/inaccessible channels/guilds already in the database
     for (guildID in saves.guildData) {
         const currentGuild = client.guilds.cache.get(guildID);
-        if (!currentGuild) {
-            delete saves.guildData[guildID];
-        } else if (!currentGuild.available) {
-            delete saves.guildData[guildID];
+        if (!currentGuild || !currentGuild.available) {
+            deleteGuild(guildID);
         } else {
             //Check channels
             const currentChannel = client.channels.cache.get(saves.guildData[guildID].activeChannel);
             if (!currentChannel) {
-                currentGuild.channels.cache.every(channel => {
-                    if (channel.type == "text") {
-                        guildData[guildID].activeChannel = channel.id;
-                    } else {
-                        return true;
-                    }
-                    client.channels.cache.get(guildData[guildID].activeChannel).send("The channel I previously sent updates to has either been deleted or is inaccessible by me. " +
-                        "From now on I will be sending my updates to this channel. " +
-                        "If you would like to change this, you can go to the channel you would like me to move to and type `!setActiveChannel`.");
-                    return false;
-                });
+                findNewActiveChannel(currentGuild);
+            } else if (!(currentChannel.permissionsFor(client.user).has('SEND_MESSAGES') && currentChannel.permissionsFor(client.user).has('VIEW_CHANNEL'))) {
+                findNewActiveChannel(currentGuild);
             }
-
+            //If there are no accessible channels available, leave guild
+            if (saves.guildData[guildID].activeChannel == "") {
+                currentGuild.leave();
+            }
         }
     }
     saveConfig();
     updateStatus();
+});
+
+client.on("guildDelete", function (guild) {
+    deleteGuild(guild.id);
+    saveConfig();
+    updateStatus();
+});
+
+client.on("channelDelete", async function (channel) {
+    if (channel.id == saves.guildData[channel.guild.id].activeChannel) {
+        findNewActiveChannel(channel.guild);
+        if (saves.guildData[channel.guild.id].activeChannel == "") {
+            channel.guild.leave();
+            updateStatus();
+        }
+        saveConfig();
+    }
+});
+
+client.on("channelUpdate", async function (oldChannel, newChannel) {
+    if (newChannel.id == saves.guildData[newChannel.guild.id].activeChannel) {
+        const permissions = newChannel.permissionsFor(client.user);
+        if (!(permissions.has('SEND_MESSAGES') && permissions.has('VIEW_CHANNEL'))) {
+            findNewActiveChannel(newChannel.guild);
+            if (saves.guildData[newChannel.guild.id].activeChannel == "") {
+                newChannel.guild.leave();
+            }
+        }
+        saveConfig();
+        updateStatus();
+    }
 });
 
 client.on("message", async function (message) {
