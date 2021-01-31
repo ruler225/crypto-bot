@@ -329,11 +329,16 @@ client.on("channelUpdate", async function (oldChannel, newChannel) {
             if (saves.guildData[newChannel.guild.id].activeChannel == "") {
                 newChannel.guild.leave();
             }
+            saveConfig();
+            updateStatus();
         }
-        saveConfig();
-        updateStatus();
     }
 });
+
+client.on("guildCreate", async function (guild) {
+    createGuild(guild);
+    saveConfig();
+})
 
 client.on("message", async function (message) {
     if (message.author.bot) return;
@@ -497,7 +502,7 @@ client.on("message", async function (message) {
             coinData = saves.coinData[slug];
         }
         if (coinData == -1) {
-            client.channels.cache.get(saves.activeChannel).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
+            client.users.fetch(config.DEVELOPER_ID).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
         } else {
             if (coinData == -2) {
                 message.channel.send("Couldn't find a coin with the name: " + inputName);
