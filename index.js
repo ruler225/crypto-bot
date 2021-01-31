@@ -390,7 +390,7 @@ client.on("message", async function (message) {
             return;
         }
         let threshold = args[args.length - 1];
-        if (!Number(threshold) && !threshold.endsWith('%')) {
+        if (!Number(threshold) && (!threshold.endsWith('%') || !Number(threshold.slice(0, -1)))) {
             message.channel.send("\"" + threshold + "\" is not a number or a percentage!\nExample percentage command: `!watch bitcoin 20%` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%)\n" +
                 "Example absolute amount command: `!watch bitcoin 30` (this alerts you when the price of bitcoin fluctuates by 30 USD)");
             return;
