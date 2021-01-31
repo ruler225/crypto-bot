@@ -343,6 +343,8 @@ client.on("guildCreate", async function (guild) {
 client.on("message", async function (message) {
     if (message.author.bot) return;
 
+    if (!message.channel.permissionsFor(client.user).has('SEND_MESSAGES')) return;
+
     if (message.content.toLowerCase().includes("thank you") || message.content.toLowerCase().includes("thanks")) {
         message.channel.messages.fetch({ limit: 1, before: message.id }).then(messages => {
             if (messages.first().author.id == client.user.id) {
