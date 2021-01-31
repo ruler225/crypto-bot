@@ -114,7 +114,7 @@ async function handlePriceCheck() {
     if (data == -1) {
         if (fail > 1) {
             if (!failMsg) {
-                failMsg = sendErrors(-1);
+                failMsg = await sendErrors(-1);
                 client.user.setStatus('invisible');
             }
         }
@@ -123,7 +123,7 @@ async function handlePriceCheck() {
         if (data == -2) {
             if (fail > 1) {
                 if (!failMsg)
-                    failMsg = sendErrors(-2);
+                    failMsg = await sendErrors(-2);
             }
             fail += 1;
             return;
@@ -343,8 +343,10 @@ client.on("guildCreate", async function (guild) {
 client.on("message", async function (message) {
     if (message.author.bot) return;
 
-    if (!message.channel.permissionsFor(client.user).has('SEND_MESSAGES')) return;
-
+    if (message.channel instanceof Discord.GuildChannel) {
+        if (!message.channel.permissionsFor(client.user).has('SEND_MESSAGES')) return;
+    }
+    
     if (message.content.toLowerCase().includes("thank you") || message.content.toLowerCase().includes("thanks")) {
         message.channel.messages.fetch({ limit: 1, before: message.id }).then(messages => {
             if (messages.first().author.id == client.user.id) {
@@ -363,14 +365,7 @@ client.on("message", async function (message) {
     if (message.guild) guildID = message.guild.id;
     let guildData = saves.guildData[guildID];
 
-    if (command == "hello") {
-        message.author.send("sup");
-        message.reply("Hello there good sir!");
-    }
-    else if (command == "channel") {
-        message.channel.send(message.channel.id);
-    }
-    else if (command == "help") {
+    if (command == "help") {
         message.channel.send("Here are a list of commands I support: \n\n" +
             "`!help`: show this help menu\n" +
             "`!setActiveChannel`: Sends all future notifications to the channel that you use this command in.\n" +
@@ -380,6 +375,10 @@ client.on("message", async function (message) {
             "`!check <currency-name>`: Checks the price of a specified cryptocurrency in USD.");
     }
     else if (command == "watch") {
+        if (!guildData) {
+            message.channel.send("I can't send alerts to a DM channel! Please use this command in a server instead.");
+            return;
+        }
         if (args.length == 0) {
             message.channel.send("Usage: `!watch <currency-name> (<percentage-change>% | <USD-change>)`. \nExample percentage command: `!watch bitcoin 20%` (this watches Bitcoin and sends an alert when the price fluctuates by more than 20%)\n" +
                 "Example absolute amount command: `!watch bitcoin 30` (this alerts you when the price of BTC fluctuates by 30 USD)");
@@ -419,7 +418,7 @@ client.on("message", async function (message) {
             if (!coinData) {
                 coinData = await getCoinInfo(slug);
                 if (coinData == -1) {
-                    message.channel.send("There was a problem connecting to coinmarketcap's servers. Please see developer log for details.");
+                    message.channel.send("There was a problem connecting to coinmarketcap's servers. Please try again later");
                     console.error(err);
                     return;
                 } else if (coinData == -2) {
@@ -456,6 +455,10 @@ client.on("message", async function (message) {
         }
 
     } else if (command == "remove") {
+        if (!guildData) {
+            message.channel.send("This command isn't supported in DM channels! Please use this command in a server instead.");
+            return;
+        }
         if (args.length < 1) {
             message.channel.send("Usage: `!remove <currency-name>`");
             return;
@@ -479,6 +482,10 @@ client.on("message", async function (message) {
         saveConfig();
     }
     else if (command == "setactivechannel") {
+        if (!guildData) {
+            message.channel.send("This command isn't supported in DM channels! Please use this command in a server instead.");
+            return;
+        }
         guildData.activeChannel = message.channel.id;
         saveConfig();
         message.channel.send("Okay. From now on I'll only send updates to this channel.");
@@ -525,6 +532,10 @@ client.on("message", async function (message) {
         }
     }
     else if (command == "list") {
+        if (!guildData) {
+            message.channel.send("I can't watch any cryptocurrencies in DM channels! Please use this command in a server instead.");
+            return;
+        }
         if (Object.keys(guildData.coinConfig).length == 0) {
             message.channel.send("I am currently not watching any currencies!");
         } else {
