@@ -453,6 +453,9 @@ client.on("message", async function (message) {
             updateStatus();
             saveConfig();
         }
+	
+	if (guildData.activeChannel != message.channel.id)
+	    message.channel.send("Warning: this is not my active channel! If you would like to receive alerts in this channel, type `!setActiveChannel`.");
 
     } else if (command == "remove") {
         if (!guildData) {
@@ -501,7 +504,7 @@ client.on("message", async function (message) {
             message.channel.send("You need to specify a cryptocurrency first. Example command: `!check bitcoin` checks the current price of Bitcoin in USD");
             return;
         }
-
+m
         const inputName = args.join(' ');
         const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-");
         let coinData = undefined;
@@ -552,11 +555,6 @@ client.on("message", async function (message) {
         return;
     }
 
-    if (guildData) {
-        if (message.channel.id != guildData.activeChannel) {
-            message.channel.send("Warning: this is not my active channel! If you would like to receive future updates in this channel, type `!setActiveChannel`.");
-        }
-    }
 });
 
 mainLoop();
