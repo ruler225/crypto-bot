@@ -504,7 +504,7 @@ client.on("message", async function (message) {
             message.channel.send("You need to specify a cryptocurrency first. Example command: `!check bitcoin` checks the current price of Bitcoin in USD");
             return;
         }
-m
+
         const inputName = args.join(' ');
         const slug = inputName.toLowerCase().replace(/-/g, "").replace(/ /g, "-");
         let coinData = undefined;
