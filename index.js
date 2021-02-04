@@ -494,8 +494,15 @@ client.on("message", async function (message) {
         message.channel.send("Okay. From now on I'll only send updates to this channel.");
     }
     else if (command == "debug") {
-        if (message.author.id == config.DEVELOPER_ID)
-            message.channel.send("```json\n" + JSON.stringify(saves) + "\n```");
+        if (message.author.id == config.DEVELOPER_ID) {
+	    let msg = "```json\n" + JSON.stringify(saves) + "\n```";
+	    if (msg.length <= 2000)
+            	message.channel.send(msg);
+	    else {
+		const attachment = new Discord.MessageAttachment(saveFileName);
+		message.channel.send(attachment);
+            }
+	}
         else
             message.channel.send("For privacy reasons, only the developer is permitted to view debug data!");
     }
