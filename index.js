@@ -175,7 +175,7 @@ async function handlePriceCheck() {
 process.on('unhandledRejection', async (reason, p) => {
     console.error(reason);
     try {
-        (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
+        await (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please refer to the developer log for crash details");
     } catch (err) {
         console.error(err);
         process.exit(-1);
@@ -186,7 +186,7 @@ process.on('unhandledRejection', async (reason, p) => {
 process.on('uncaughtException', async (err, origin) => {
     console.error(err);
     try {
-        (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
+        await (await client.users.fetch(config.DEVELOPER_ID)).send("A problem occurred and I had to terminate. I should be restarting very shortly though. Please contact the developer for crash details.");
     } catch (err) {
         console.error(err);
         process.exit(-1);
