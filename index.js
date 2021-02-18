@@ -109,6 +109,14 @@ async function sendErrors(code) {
     }
 }
 
+function removeCoinFromGuild(slug, guildID) {
+    let guildIndex = saves.coinData[slug].watchedBy.indexOf(guildID);
+    saves.coinData[slug].watchedBy.splice(guildIndex, 1);
+    delete saves.guildData[guildID].coinConfig[slug];
+    if (saves.coinData[slug].watchedBy.length == 0)
+        delete saves.coinData[slug];
+}
+
 async function handlePriceCheck() {
     let data = await fetchAllCoinInfo();
     if (data == -1) {
@@ -476,11 +484,7 @@ client.on("message", async function (message) {
         if (guildData.coinConfig[slug]) {
             let name = saves.coinData[slug].name;
             let symbol = saves.coinData[slug].symbol;
-            let guildIndex = saves.coinData[slug].watchedBy.indexOf(guildID);
-            saves.coinData[slug].watchedBy.splice(guildIndex, 1);
-            delete guildData.coinConfig[slug];
-            if (saves.coinData[slug].watchedBy.length == 0)
-                delete saves.coinData[slug];
+            removeCoinFromGuild(slug, guildID);
             message.channel.send("Okay. I'm no longer watching " + name + " (" + symbol + ")");
         } else {
             message.channel.send("I'm currently not watching a coin called " + inputName);
