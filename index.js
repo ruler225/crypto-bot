@@ -304,6 +304,10 @@ client.on("ready", function () {
     updateStatus();
 });
 
+client.on("rateLimit", (limitInfo) => {
+	console.error("Notice: a rate limit has occured for request for route " + limitInfo.route);
+});
+
 client.on("guildDelete", function (guild) {
     deleteGuild(guild.id);
     saveConfig();
