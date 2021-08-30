@@ -529,7 +529,7 @@ client.on("message", async function (message) {
             coinData = saves.coinData[slug];
         }
         if (coinData == -1) {
-            client.users.fetch(config.DEVELOPER_ID).send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
+            message.channel.send("There was a problem connecting to coinmarketcap's servers. Please check the developer log for details.");
         } else {
             if (coinData == -2) {
                 message.channel.send("Couldn't find a coin with the name: " + inputName);
