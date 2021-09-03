@@ -38,7 +38,9 @@ function getCoinInfo(slug, logErrors = false) {
         request.get({
             url: baseURL + slug,
             json: true,
-            headers: {}
+            headers: {
+                'User-Agent': 'cryptobot/2.0'
+            }
         }, async (err, res, data) => {
             if (err) {
                 if (logErrors) console.error(err);
@@ -71,7 +73,9 @@ function fetchAllCoinInfo() {
         request.get({
             url: baseURL + slugList.join(','),
             json: true,
-            headers: {}
+            headers: {
+                'User-Agent': 'cryptobot/2.0'
+            }
         }, async (err, res, data) => {
             if (err) {
                 console.error(err);
